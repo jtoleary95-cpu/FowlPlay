@@ -53,6 +53,10 @@ input{width:100%;font:400 22px var(--body);padding:10px 12px;border:3px solid va
 .topbar button{font:400 18px var(--hand);color:var(--paper);background:transparent;border:2px solid rgba(246,239,217,.6);border-radius:10px;padding:3px 12px}
 .score{font:400 22px var(--hand)}
 .dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);margin-right:6px;vertical-align:-1px}
+
+html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+canvas,.pad{touch-action:none}
 </style>
 </head>
 <body>
@@ -154,10 +158,10 @@ let api = onlineApi;
 
 /* ================= FOWL PLAY: data ================= */
 const W = 360, H = 600;           // world units (portrait)
-const GSCALE = 4.2;               // m/s² -> world units/s²
+const GSCALE = 3.6;               // m/s² -> world units/s²
 const THRUST = 150, SIDE = 72, DRAG = 0.15;
-const SAFE_VY = 55, SAFE_VX = 32;
-const FUEL_MAX = 100, FUEL_MAIN = 8, FUEL_SIDE = 3;
+const SAFE_VY = 66, SAFE_VX = 38;
+const FUEL_MAX = 100, FUEL_MAIN = 6.5, FUEL_SIDE = 2.4;
 
 const WORLDS = [
   {id: "moon", name: "The Moon", g: 1.62, ground: "#a3a3a8", dark: "#6c6c74", sky: ["#04050d", "#151a36"], hz: "Meteor showers",
@@ -269,72 +273,72 @@ function makeLevel(wi){
 /* ================= hazards: pure functions of level time t (same for both racers) ================= */
 const HZ = [
   { // 0 Moon: meteors
-    list(t, L){ const out = [], I = 1.5; for(let k = Math.max(1, Math.floor(t / I) - 4); k <= Math.floor(t / I); k++){ const age = t - k * I; if(age < 0) continue;
+    list(t, L){ const out = [], I = 2; for(let k = Math.max(1, Math.floor(t / I) - 4); k <= Math.floor(t / I); k++){ const age = t - k * I; if(age < 0) continue;
       const vx = (hsh(k, 2) - .5) * 80, x = 20 + hsh(k, 1) * 320 + vx * age, y = -20 + 150 * age; if(x < -20 || x > W + 20) continue;
       if(y > L.gy(x)){ if(y - L.gy(x) < 40) out.push({x, y: L.gy(x), boom: 1}); continue; } out.push({x, y, vx}); } return out; },
-    hit(s, t, L){ return this.list(t, L).some(m => !m.boom && Math.hypot(m.x - s.x, m.y - s.y) < 19); },
+    hit(s, t, L){ return this.list(t, L).some(m => !m.boom && Math.hypot(m.x - s.x, m.y - s.y) < 16); },
     draw(c, t, L){ for(const m of this.list(t, L)){ if(m.boom){ c.fillStyle = "rgba(220,220,220,.5)"; c.beginPath(); c.arc(m.x, m.y - 4, 10, 0, 7); c.fill(); continue; }
       c.strokeStyle = "rgba(255,180,90,.7)"; c.lineWidth = 4; c.beginPath(); c.moveTo(m.x, m.y); c.lineTo(m.x - m.vx * .18, m.y - 26); c.stroke();
       c.fillStyle = "#7a6655"; c.strokeStyle = "#111"; c.lineWidth = 2; c.beginPath(); c.arc(m.x, m.y, 7, 0, 7); c.fill(); c.stroke(); } }
   },
   { // 1 Mercury: solar flares
     bands(t){ const P = 5, tt = t - 1.5; if(tt < 0) return []; const k = Math.floor(tt / P), ph = tt - k * P, x1 = 50 + hsh(k, 3) * 260, x2 = (x1 + 140 + hsh(k, 5) * 40) % 300 + 30;
-      const st = ph < 1.2 ? "warn" : ph < 2.2 ? "burn" : ""; return st ? [{x: x1, st, ph}, {x: x2, st, ph}] : []; },
-    hit(s, t){ return this.bands(t).some(b => b.st === "burn" && Math.abs(b.x - s.x) < 40); },
+      const st = ph < 1.4 ? "warn" : ph < 2.2 ? "burn" : ""; return st ? [{x: x1, st, ph}, {x: x2, st, ph}] : []; },
+    hit(s, t){ return this.bands(t).some(b => b.st === "burn" && Math.abs(b.x - s.x) < 32); },
     draw(c, t, L){ for(const b of this.bands(t)){ const gy = L.gy(b.x);
       if(b.st === "warn"){ c.fillStyle = `rgba(255,150,40,${.08 + .12 * Math.abs(Math.sin(b.ph * 14))})`; c.fillRect(b.x - 28, 0, 56, gy); }
       else { const gr = c.createLinearGradient(b.x - 28, 0, b.x + 28, 0); gr.addColorStop(0, "rgba(255,120,0,0)"); gr.addColorStop(.5, "rgba(255,230,120,.9)"); gr.addColorStop(1, "rgba(255,120,0,0)"); c.fillStyle = gr; c.fillRect(b.x - 28, 0, 56, gy); } } }
   },
   { // 2 Mars: dust devils push you around
     devils(t, L){ return [0, 1].map(j => { const x = 180 + 135 * Math.sin(t * .5 + j * 2.6); return {x, top: L.gy(x) - 230, j}; }); },
-    force(s, t, L){ let ax = 0, ay = 0; for(const d of this.devils(t, L)) if(Math.abs(s.x - d.x) < 28 && s.y > d.top){ ax += 170 * Math.sign(Math.sin(t * 2.4 + d.j * 1.7) || 1); ay -= 70; } return {ax, ay}; },
+    force(s, t, L){ let ax = 0, ay = 0; for(const d of this.devils(t, L)) if(Math.abs(s.x - d.x) < 28 && s.y > d.top){ ax += 120 * Math.sign(Math.sin(t * 2.4 + d.j * 1.7) || 1); ay -= 50; } return {ax, ay}; },
     draw(c, t, L){ for(const d of this.devils(t, L)){ const gy = L.gy(d.x); c.strokeStyle = "rgba(230,150,110,.55)"; c.lineWidth = 3;
       for(let i = 0; i < 9; i++){ const y = gy - i * 26, w = 8 + i * 2.6, o = Math.sin(t * 7 + i) * 5; c.beginPath(); c.ellipse(d.x + o, y, w, 5, 0, 0, 7); c.stroke(); } } }
   },
   { // 3 Venus: acid clouds drain fuel
     clouds(t){ return [0, 1, 2].map(j => { const sp = (j % 2 ? -1 : 1) * (14 + j * 6); let x = (60 + j * 120 + sp * t) % 460; if(x < 0) x += 460; return {x: x - 50, y: 170 + j * 95}; }); },
-    drain(s, t){ return this.clouds(t).some(k => ((s.x - k.x) / 58) ** 2 + ((s.y - k.y) / 26) ** 2 < 1) ? 24 : 0; },
+    drain(s, t){ return this.clouds(t).some(k => ((s.x - k.x) / 58) ** 2 + ((s.y - k.y) / 26) ** 2 < 1) ? 16 : 0; },
     draw(c, t){ for(const k of this.clouds(t)){ c.fillStyle = "rgba(190,220,60,.33)"; for(let i = -2; i <= 2; i++){ c.beginPath(); c.arc(k.x + i * 20, k.y + Math.abs(i) * 4, 22 - Math.abs(i) * 3, 0, 7); c.fill(); }
       c.strokeStyle = "rgba(220,255,90,.5)"; c.lineWidth = 2; c.beginPath(); c.ellipse(k.x, k.y, 58, 26, 0, 0, 7); c.stroke(); } }
   },
   null, null, null, null, null, null
 ];
 HZ[4] = { // Earth: lightning
-  bolts(t){ const I = 2, tt = t - 1; if(tt < 0) return []; const k = Math.floor(tt / I), ph = tt - k * I; return ph < 1.05 ? [{x: 30 + hsh(k, 4) * 300, st: ph < .8 ? "warn" : "hit", k}] : []; },
-  hit(s, t){ return this.bolts(t).some(b => b.st === "hit" && Math.abs(b.x - s.x) < 16); },
+  bolts(t){ const I = 2.6, tt = t - 1; if(tt < 0) return []; const k = Math.floor(tt / I), ph = tt - k * I; return ph < 1.05 ? [{x: 30 + hsh(k, 4) * 300, st: ph < .8 ? "warn" : "hit", k}] : []; },
+  hit(s, t){ return this.bolts(t).some(b => b.st === "hit" && Math.abs(b.x - s.x) < 13); },
   draw(c, t, L){ for(const b of this.bolts(t)){ const gy = L.gy(b.x);
     if(b.st === "warn"){ c.strokeStyle = `rgba(255,255,200,${.15 + .25 * (Math.sin(t * 40) > 0)})`; c.lineWidth = 2; c.setLineDash([6, 8]); c.beginPath(); c.moveTo(b.x, 0); c.lineTo(b.x, gy); c.stroke(); c.setLineDash([]); }
     else { c.strokeStyle = "#fffbd0"; c.lineWidth = 5; c.shadowColor = "#fff"; c.shadowBlur = 18; c.beginPath(); c.moveTo(b.x, 0); for(let y = 0; y < gy; y += 30) c.lineTo(b.x + (hsh(b.k, y) - .5) * 26, y); c.lineTo(b.x, gy); c.stroke(); c.shadowBlur = 0; } } }
 };
 HZ[5] = { // Uranus: ice shards
-  list(t, L){ const out = [], I = .8; for(let k = Math.max(2, Math.floor(t / I) - 6); k <= Math.floor(t / I); k++){ const age = t - k * I; if(age < 0) continue; const x = 15 + hsh(k, 6) * 330, y = -20 + 170 * age; if(y < L.gy(x)) out.push({x, y}); } return out; },
-  hit(s, t, L){ return this.list(t, L).some(i => Math.abs(i.x - s.x) < 14 && Math.abs(i.y - s.y) < 16); },
+  list(t, L){ const out = [], I = 1.05; for(let k = Math.max(2, Math.floor(t / I) - 6); k <= Math.floor(t / I); k++){ const age = t - k * I; if(age < 0) continue; const x = 15 + hsh(k, 6) * 330, y = -20 + 170 * age; if(y < L.gy(x)) out.push({x, y}); } return out; },
+  hit(s, t, L){ return this.list(t, L).some(i => Math.abs(i.x - s.x) < 12 && Math.abs(i.y - s.y) < 14); },
   draw(c, t, L){ for(const i of this.list(t, L)){ c.fillStyle = "#e9fdff"; c.strokeStyle = "#2b6f78"; c.lineWidth = 2; c.beginPath(); c.moveTo(i.x, i.y + 10); c.lineTo(i.x - 5, i.y - 10); c.lineTo(i.x + 5, i.y - 10); c.closePath(); c.fill(); c.stroke(); } }
 };
 HZ[6] = { // Saturn: ring debris lanes
-  rocks(t){ const out = []; [170, 270, 370].forEach((y, j) => { const sp = (j % 2 ? -1 : 1) * 55 * (1 + j * .15); for(let i = 0; i < 3; i++){ let x = (i * 130 + j * 50 + sp * t) % 390; if(x < 0) x += 390; out.push({x: x - 15, y, j, i}); } }); return out; },
-  hit(s, t){ return this.rocks(t).some(k => Math.hypot(k.x - s.x, k.y - s.y) < 22); },
+  rocks(t){ const out = []; [170, 270, 370].forEach((y, j) => { const sp = (j % 2 ? -1 : 1) * 42 * (1 + j * .15); for(let i = 0; i < 3; i++){ let x = (i * 130 + j * 50 + sp * t) % 390; if(x < 0) x += 390; out.push({x: x - 15, y, j, i}); } }); return out; },
+  hit(s, t){ return this.rocks(t).some(k => Math.hypot(k.x - s.x, k.y - s.y) < 19); },
   draw(c, t){ for(const k of this.rocks(t)){ c.fillStyle = k.i % 2 ? "#d9d2c2" : "#b8ad94"; c.strokeStyle = "#111"; c.lineWidth = 2; c.beginPath();
     for(let a = 0; a < 7; a++){ const rr = 9 + hsh(k.i + k.j * 3, a) * 4, an = a / 7 * 6.28 + t; c.lineTo(k.x + Math.cos(an) * rr, k.y + Math.sin(an) * rr); } c.closePath(); c.fill(); c.stroke(); } }
 };
 HZ[7] = { // Neptune: wind gusts
   gust(t){ const P = 4.5, tt = t - 1.5; if(tt < 0) return null; const k = Math.floor(tt / P), ph = tt - k * P, dir = hsh(k, 7) > .5 ? 1 : -1; return ph < .8 ? {st: "warn", dir} : ph < 2.6 ? {st: "blow", dir} : null; },
-  force(s, t){ const g = this.gust(t); return g && g.st === "blow" ? {ax: 115 * g.dir, ay: 0} : {ax: 0, ay: 0}; },
+  force(s, t){ const g = this.gust(t); return g && g.st === "blow" ? {ax: 80 * g.dir, ay: 0} : {ax: 0, ay: 0}; },
   draw(c, t){ const g = this.gust(t); if(!g) return; c.strokeStyle = g.st === "warn" ? "rgba(200,230,255,.25)" : "rgba(200,230,255,.6)"; c.lineWidth = 2;
     for(let i = 0; i < 14; i++){ const y = 40 + i * 34, x = ((i * 97 + t * 420 * g.dir) % 420 + 420) % 420 - 30; c.beginPath(); c.moveTo(x, y); c.lineTo(x - 34 * g.dir, y); c.stroke(); }
     c.fillStyle = "rgba(200,230,255,.85)"; c.font = "26px Gochi Hand, cursive"; c.textAlign = "center"; c.fillText(g.dir > 0 ? "gust →" : "← gust", W / 2, 88); }
 };
 HZ[8] = { // Jupiter: storm vortex
   ctr(t){ return {x: 180 + 70 * Math.sin(t * .3), y: 250}; },
-  force(s, t){ const v = this.ctr(t), dx = v.x - s.x, dy = v.y - s.y, d = Math.hypot(dx, dy); if(d > 170 || d < 1) return {ax: 0, ay: 0}; const a = Math.min(150, 7000 / Math.max(d, 25));
+  force(s, t){ const v = this.ctr(t), dx = v.x - s.x, dy = v.y - s.y, d = Math.hypot(dx, dy); if(d > 150 || d < 1) return {ax: 0, ay: 0}; const a = Math.min(105, 5000 / Math.max(d, 25));
     return {ax: dx / d * a - dy / d * 40, ay: dy / d * a + dx / d * 40}; },
-  hit(s, t){ const v = this.ctr(t); return Math.hypot(v.x - s.x, v.y - s.y) < 26; },
+  hit(s, t){ const v = this.ctr(t); return Math.hypot(v.x - s.x, v.y - s.y) < 22; },
   draw(c, t){ const v = this.ctr(t); for(let i = 0; i < 5; i++){ c.strokeStyle = `rgba(230,${90 + i * 25},60,${.5 - i * .07})`; c.lineWidth = 4; c.beginPath();
     for(let a = 0; a < 6.28 * 2; a += .2){ const rr = 14 + a * 9 + i * 6; c.lineTo(v.x + Math.cos(a - t * 2.4 + i) * rr, v.y + Math.sin(a - t * 2.4 + i) * rr * .6); } c.stroke(); }
     c.fillStyle = "#7a1f12"; c.strokeStyle = "#111"; c.lineWidth = 2; c.beginPath(); c.ellipse(v.x, v.y, 22, 14, 0, 0, 7); c.fill(); c.stroke(); }
 };
 HZ[9] = { // Pluto: ice geysers
-  state(t, j){ const P = 3.6, tt = t - 1 - j * 1.2; if(tt < 0) return ""; const ph = tt % P; return ph < .9 ? "warn" : ph < 2.1 ? "blow" : ""; },
+  state(t, j){ const P = 3.6, tt = t - 1 - j * 1.2; if(tt < 0) return ""; const ph = tt % P; return ph < 1.1 ? "warn" : ph < 2 ? "blow" : ""; },
   hit(s, t, L){ return L.vents.some((x, j) => this.state(t, j) === "blow" && Math.abs(s.x - x) < 22 && s.y > L.gy(x) - 260); },
   draw(c, t, L){ L.vents.forEach((x, j) => { const st = this.state(t, j), gy = L.gy(x);
     c.fillStyle = "#4b4058"; c.beginPath(); c.ellipse(x, gy, 12, 4, 0, 0, 7); c.fill();
@@ -614,7 +618,7 @@ class Run {
       drawBird(c, b, b.x, b.y, 1, t);
     }
     if(this.beaming && !s.dead){ const b = this.beaming; c.fillStyle = `rgba(160,255,230,${.18 + .12 * Math.sin(nowp / 60)})`; c.beginPath(); c.moveTo(s.x - 7, s.y + 9); c.lineTo(s.x + 7, s.y + 9); c.lineTo(b.x + 18, b.y + 2); c.lineTo(b.x - 18, b.y + 2); c.closePath(); c.fill(); }
-    if(this.opp && this.opp.l === this.wi && !this.opp.d){ const o = this.opp, age = Math.min(.25, (api.now() - o.ts) / 1000); drawShip(c, {x: o.x + o.vx * age, y: o.y + o.vy * age, u: o.u, l: o.ll, r: o.r}, "#ff9f3a", .5);
+    if(this.opp && this.opp.l === this.wi && !this.opp.d){ const o = this.opp, age = Math.min(.4, Math.max(0, (api.now() - o.ts) / 1000)); drawShip(c, {x: o.x + o.vx * age, y: o.y + o.vy * age, u: o.u, l: o.ll, r: o.r}, "#ff9f3a", .5);
       c.globalAlpha = .8; c.fillStyle = "#ffd9a8"; c.font = "14px Patrick Hand, cursive"; c.textAlign = "center"; c.fillText(this.o.oppName || "Rival", o.x, o.y - 18); c.globalAlpha = 1; }
     if(!s.dead) drawShip(c, s, "#36d6c3", 1, t);
     for(const f of this.fx){ c.globalAlpha = Math.max(0, f.life); c.fillStyle = f.c; c.fillRect(f.x - 2.5, f.y - 2.5, 5, 5); } c.globalAlpha = 1;
@@ -740,8 +744,9 @@ function raceLevel(){
     onDone(ms, run){ run.showOverlay(`<div class="card center"><h2>Landed!</h2><p>${fmt(ms)}</p></div>`);
       pTx(c => { if(c.phase !== "race" || c.l !== L || c.lv?.[L]) return false; c.lv ||= {}; c.lv[L] = {w: me, t: ms};
         c.wins[me] = (c.wins[me] || 0) + 1; c.tt[me] = (c.tt[me] || 0) + ms; c.tt[o] = (c.tt[o] || 0) + ms + 15000;
-        if(L >= 9) c.phase = "over"; else { c.l = L + 1; c.at = api.now() + 6000; } }); },
-    tick(run){ const now = performance.now(); if(now - OPPD.last < 110) return; OPPD.last = now; const s = run.s;
+        if(L >= 9) c.phase = "over"; else { c.l = L + 1; c.at = api.now() + 6000; } });
+      landWatch(L, ms); },
+    tick(run){ const now = performance.now(); if(now - OPPD.last < 250) return; OPPD.last = now; const s = run.s;
       api.update(rid(S.code) + "_s_" + me, {l: L, x: Math.round(s.x * 10) / 10, y: Math.round(s.y * 10) / 10, vx: Math.round(s.vx), vy: Math.round(s.vy), u: s.u ? 1 : 0, ll: s.l ? 1 : 0, r: s.r ? 1 : 0, d: s.dead ? 1 : 0, b: run.birds.filter(b => b.got).length, ts: api.now()}).catch(() => {}); }
   });
   if(OPPD.key !== S.code + o){ if(OPPD.off) OPPD.off(); OPPD.key = S.code + o; OPPD.off = api.listen(rid(S.code) + "_s_" + o, v => { OPPD.v = v; if(RUN) RUN.opp = v; }); }
@@ -769,6 +774,23 @@ window.FP = {get run(){ return RUN; }, get R(){ return R; }, makeLevel, WORLDS, 
 
 /* boot */
 (() => { try{ const s = JSON.parse(STORE.getItem("fowl_s") || "null"); if(s?.code){ S = s; connect(); return; } }catch{} home(); })();
+
+/* after landing: re-send the win until the race moves on; if this phone missed the update, reconnect */
+function landWatch(L, ms){
+  const t0 = Date.now(), me = S.pid, o = opp(me), code = S.code;
+  const iv = setInterval(() => {
+    if(!S || S.code !== code || !R){ clearInterval(iv); return; }
+    if(R.phase === "over" || R.l > L){ clearInterval(iv); return; }
+    if(!R.lv?.[L]) pTx(c => { if(c.phase !== "race" || c.l !== L || c.lv?.[L]) return false; c.lv ||= {}; c.lv[L] = {w: me, t: ms};
+      c.wins[me] = (c.wins[me] || 0) + 1; c.tt[me] = (c.tt[me] || 0) + ms; c.tt[o] = (c.tt[o] || 0) + ms + 15000;
+      if(L >= 9) c.phase = "over"; else { c.l = L + 1; c.at = api.now() + 6000; } });
+    if(Date.now() - t0 > 6000 && Date.now() - (landWatch.rc || 0) > 6000){ landWatch.rc = Date.now(); if(unsub) unsub(); unsub = api.listen(rid(S.code), v => { if(!S) return; if(!v){ leave(); return; } R = v; render(); }); }
+  }, 2000);
+}
+/* iPhone: no long-press text selection, Look Up or callout menus during play */
+document.addEventListener("contextmenu", e => { if(!(e.target.closest && e.target.closest("input"))) e.preventDefault(); });
+document.addEventListener("selectstart", e => { if(!(e.target.closest && e.target.closest("input"))) e.preventDefault(); });
+document.addEventListener("touchstart", e => { if(e.target.closest && e.target.closest(".pad, canvas")) e.preventDefault(); }, {passive: false});
 
 </script>
 </body>
